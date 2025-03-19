@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # pgAdmin 4
 
 pgAdmin 4 is a rewrite of the popular pgAdmin3 management tool for the
@@ -277,3 +278,6 @@ If you wish to discuss pgAdmin 4, or contribute to the project, please use the
 pgAdmin Hackers mailing list:
 
 pgadmin-hackers@postgresql.org
+=======
+# pgAdmin4-IITM-Pravartak
+>>>>>>> cde885487bc87424cc37953f128d55c5961c7bad
