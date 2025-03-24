@@ -72,7 +72,7 @@ Export Options
    |                      | You can select the option *With DROP Table* if you wish to have DROP Table DDL statements before  |                |
    |                      | each CREATE Table DDL. You can see the option by clicking the down arrow beside the SQL button.   |                |
    +----------------------+---------------------------------------------------------------------------------------------------+----------------+
-   | *Download image*     | Click the *Download image* icon to save the ERD diagram in a image formate                        | Option/Alt +   |
+   | *Export image*       | Click the *Export image* icon to save the ERD diagram in a image formate                          | Option/Alt +   |
    |                      |                                                                                                   | Ctrl + I       |
    +----------------------+---------------------------------------------------------------------------------------------------+----------------+
 

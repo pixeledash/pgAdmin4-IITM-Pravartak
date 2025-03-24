@@ -487,6 +487,7 @@ export class SchedulerSchema extends BaseUISchema {
     super({
       enable_scheduler: false,
       schedule_type: 'one_time',
+      start_date_time: null,
       ...initValues,
     });
 
@@ -524,16 +525,16 @@ export class SchedulerSchema extends BaseUISchema {
       disabled: (state) => !state.enable_scheduler,
       group: gettext('Scheduler'),
     }, {
-      id: 'start_date',
-      label: gettext('Start date'),
+      id: 'start_date_time',
+      label: gettext('Start date and time'),
       type: 'datetimepicker',
-      deps: ['enable_scheduler'],
-      disabled: (state) => !state.enable_scheduler,
-      group: gettext('Scheduler'),
-    }, {
-      id: 'start_time',
-      label: gettext('Start time'),
-      type: 'timepicker',
+      controlProps: {
+        autoOk: true,
+        disablePast: true,
+        placeholder: gettext('YYYY-MM-DD HH:mm:ss'),
+        showSeconds: true,
+        ampm: false,
+      },
       deps: ['enable_scheduler'],
       disabled: (state) => !state.enable_scheduler,
       group: gettext('Scheduler'),
@@ -585,6 +586,16 @@ export class SchedulerSchema extends BaseUISchema {
       disabled: (state) => !state.enable_scheduler || state.schedule_type !== 'monthly',
       group: gettext('Scheduler'),
     }];
+  }
+
+  validate(state, setError) {
+    if (state.enable_scheduler) {
+      if (!state.start_date_time) {
+        setError('start_date_time', gettext('Start date and time cannot be empty'));
+        return true;
+      }
+    }
+    return false;
   }
 }
 

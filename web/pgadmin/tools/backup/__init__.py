@@ -12,6 +12,9 @@ import json
 import copy
 import functools
 import operator
+import threading
+import time
+from datetime import datetime, timedelta
 
 from flask import render_template, request, current_app, Response
 from flask_babel import gettext
@@ -20,6 +23,7 @@ from pgadmin.misc.bgprocess.processes import BatchProcess, IProcessDesc
 from pgadmin.utils import PgAdminModule, does_utility_exist, get_server, \
     filename_with_file_manager_path
 from pgadmin.utils.ajax import make_json_response, bad_request, unauthorized
+from pgadmin.utils.driver import get_driver
 
 from config import PG_DEFAULT_DRIVER
 # This unused import is required as API test cases will fail if we remove it,
@@ -385,6 +389,131 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     return args
 
 
+class BackupSchedulerJob:
+    """Class to represent a scheduled backup job"""
+    
+    def __init__(self, sid, data, schedule_type, start_time):
+        self.sid = sid
+        self.data = data  # Contains all backup settings including format, filename etc
+        self.schedule_type = schedule_type
+        self.start_time = start_time
+        self.last_run = None
+    
+    def should_run(self):
+        """Check if the job should run now based on schedule"""
+        now = datetime.now()
+        
+        # Don't run if start time hasn't been reached yet
+        if now < self.start_time:
+            print(f"Job {self.sid} not started yet, current time: {now}, start time: {self.start_time}")
+            return False
+            
+        if self.last_run:
+            if self.schedule_type == 'one_time':
+                return False
+            elif self.schedule_type == 'daily':
+                next_run = self.last_run.replace(
+                    hour=self.start_time.hour,
+                    minute=self.start_time.minute,
+                    second=self.start_time.second
+                ) + timedelta(days=1)
+                return now >= next_run
+            elif self.schedule_type == 'weekly':
+                next_run = self.last_run.replace(
+                    hour=self.start_time.hour,
+                    minute=self.start_time.minute,
+                    second=self.start_time.second
+                ) + timedelta(days=7)
+                return now >= next_run
+            elif self.schedule_type == 'monthly':
+                # Get the same day next month
+                if self.last_run.month == 12:
+                    next_month = 1
+                    next_year = self.last_run.year + 1
+                else:
+                    next_month = self.last_run.month + 1
+                    next_year = self.last_run.year
+                    
+                next_run = self.last_run.replace(
+                    year=next_year,
+                    month=next_month,
+                    hour=self.start_time.hour,
+                    minute=self.start_time.minute,
+                    second=self.start_time.second
+                )
+                return now >= next_run
+        else:
+            # First run
+            return True
+
+class BackupScheduler:
+    """Scheduler service for backup jobs"""
+    
+    def __init__(self):
+        self.jobs = {}
+        self.thread = None
+        self.running = False
+        self.app = None
+    
+    def init_app(self, app):
+        """Initialize with Flask app"""
+        self.app = app
+    
+    def add_job(self, sid, data, schedule_type, start_time):
+        """Add a new scheduled backup job"""
+        job = BackupSchedulerJob(sid, data, schedule_type, start_time)
+        if sid not in self.jobs:
+            self.jobs[sid] = []
+        self.jobs[sid].append(job)
+        
+        if not self.running:
+            self.start()
+    
+    def start(self):
+        """Start the scheduler thread"""
+        if not self.running:
+            self.running = True
+            self.thread = threading.Thread(target=self._run)
+            self.thread.daemon = True
+            self.thread.start()
+    
+    def stop(self):
+        """Stop the scheduler thread"""
+        self.running = False
+        if self.thread:
+            self.thread.join()
+    
+    def _run(self):
+        """Main scheduler loop"""
+        from flask import current_app
+        
+        while self.running:
+            try:
+                # Use app object if available, otherwise try current_app
+                app_ctx = self.app.app_context() if self.app else current_app.app_context()
+                
+                with app_ctx:
+                    now = datetime.now()
+                    for sid in list(self.jobs.keys()):
+                        for job in self.jobs[sid]:
+                            if job.should_run():
+                                try:
+                                    create_backup_objects_job(sid, job.data)
+                                    job.last_run = now
+                                except Exception as e:
+                                    current_app.logger.exception(
+                                        f"Error executing scheduled backup for server {sid}: {str(e)}"
+                                    )
+                                    
+                time.sleep(60)  # Check every minute
+                    
+            except Exception as e:
+                print(f"Error in backup scheduler: {str(e)}")
+                time.sleep(60)
+
+# Initialize the scheduler
+backup_scheduler = BackupScheduler()
+
 @blueprint.route(
     '/job/<int:sid>', methods=['POST'], endpoint='create_server_job'
 )
@@ -392,95 +521,164 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     '/job/<int:sid>/object', methods=['POST'], endpoint='create_object_job'
 )
 @pga_login_required
-def create_backup_objects_job(sid):
+def create_backup_objects_job(sid, scheduled_data=None):
     """
     Args:
         sid: Server ID
-
-        Creates a new job for backup task
-        (Backup Database(s)/Schema(s)/Table(s))
+        scheduled_data: Data for scheduled backup (optional)
 
     Returns:
         None
     """
-
-    data = json.loads(request.data)
-    backup_obj_type = data.get('type', 'objects')
-
     try:
-        backup_file = filename_with_file_manager_path(
-            data['file'], (data.get('format', '') != 'directory'))
-    except PermissionError as e:
-        return unauthorized(errormsg=str(e))
-    except Exception as e:
-        return bad_request(errormsg=str(e))
+        data = scheduled_data if scheduled_data else json.loads(request.data)
+        backup_obj_type = data.get('type', 'objects')
 
-    # Fetch the server details like hostname, port, roles etc
-    server = get_server(sid)
+        # Handle scheduler if enabled
+        if not scheduled_data and data.get('enable_scheduler'):
+            try:
+                schedule_type = data.get('schedule_type')
+                # start_date_time = data.get('start_date_time')
+                start_date_time = "2025-03-25 01:26:00"
+                if not start_date_time:
+                    return make_json_response(
+                        success=0,
+                        errormsg='Start date and time is required for scheduling'
+                    )
+                
+                try:
+                    # Remove timezone offset if present
+                    if '+' in start_date_time:
+                        start_date_time = start_date_time.split('+')[0].strip()
+                    elif '-' in start_date_time and start_date_time.count('-') > 2:
+                        start_date_time = start_date_time.rsplit('-', 1)[0].strip()
+                    
+                    start_datetime = datetime.strptime(
+                        start_date_time,
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    
+                    # Create a copy of data for the scheduler
+                    backup_config = copy.deepcopy(data)
+                    
+                    # Remove scheduler-specific fields but keep backup settings
+                    scheduler_fields = ['enable_scheduler', 'schedule_type', 'start_date_time']
+                    for field in scheduler_fields:
+                        if field in backup_config:
+                            del backup_config[field]
+                    
+                    # Add job to scheduler with backup configuration
+                    backup_scheduler.add_job(
+                        sid=sid,
+                        data=backup_config,
+                        schedule_type=schedule_type,
+                        start_time=start_datetime
+                    )
+                    
+                    return make_json_response(
+                        data={'message': 'Backup scheduled successfully', 'Success': 1}
+                    )
+                except ValueError as e:
+                    return make_json_response(
+                        success=0,
+                        errormsg=f'Invalid datetime format: {str(e)}'
+                    )
+            except Exception as e:
+                current_app.logger.exception(
+                    f"Error scheduling backup: {str(e)}"
+                )
+                return make_json_response(
+                    success=0,
+                    errormsg=f'Error scheduling backup: {str(e)}'
+                )
 
-    if server is None:
-        return make_json_response(
-            success=0,
-            errormsg=SERVER_NOT_FOUND
-        )
+        # Continue with immediate backup process
+        try:
+            backup_file = filename_with_file_manager_path(
+                data['file'], (data.get('format', '') != 'directory'))
+        except PermissionError as e:
+            return unauthorized(errormsg=str(e))
+        except Exception as e:
+            return bad_request(errormsg=str(e))
 
-    # To fetch MetaData for the server
-    from pgadmin.utils.driver import get_driver
-    driver = get_driver(PG_DEFAULT_DRIVER)
-    manager = driver.connection_manager(server.id)
-    conn = manager.connection()
-    connected = conn.connected()
+        # Fetch the server details like hostname, port, roles etc
+        server = get_server(sid)
 
-    if not connected:
-        return make_json_response(
-            success=0,
-            errormsg=gettext("Please connect to the server first.")
-        )
-
-    utility = manager.utility('backup') if backup_obj_type == 'objects' \
-        else manager.utility('backup_server')
-
-    ret_val = does_utility_exist(utility)
-    if ret_val:
-        return make_json_response(
-            success=0,
-            errormsg=ret_val
-        )
-
-    args = _get_args_params_values(
-        data, conn, backup_obj_type, backup_file, server, manager)
-
-    escaped_args = [
-        escape_dquotes_process_arg(arg) for arg in args
-    ]
-    try:
-        bfile = data['file'].encode('utf-8') \
-            if hasattr(data['file'], 'encode') else data['file']
-        if backup_obj_type == 'objects':
-            args.append(data['database'])
-            escaped_args.append(data['database'])
-            p = BatchProcess(
-                desc=BackupMessage(
-                    BACKUP.OBJECT, server.id, bfile,
-                    *args,
-                    database=data['database']
-                ),
-                cmd=utility, args=escaped_args, manager_obj=manager
+        if server is None:
+            return make_json_response(
+                success=0,
+                errormsg=SERVER_NOT_FOUND
             )
-        else:
-            p = BatchProcess(
-                desc=BackupMessage(
-                    BACKUP.SERVER if backup_obj_type != 'globals'
-                    else BACKUP.GLOBALS,
-                    server.id, bfile,
-                    *args
-                ),
-                cmd=utility, args=escaped_args, manager_obj=manager
+
+        # To fetch MetaData for the server
+        driver = get_driver(PG_DEFAULT_DRIVER)
+        manager = driver.connection_manager(server.id)
+        conn = manager.connection()
+        
+        if not conn.connected():
+            return make_json_response(
+                success=0,
+                errormsg=gettext("Please connect to the server first.")
             )
 
-        p.set_env_variables(server)
-        p.start()
-        jid = p.id
+        utility = manager.utility('backup') if backup_obj_type == 'objects' \
+            else manager.utility('backup_server')
+
+        ret_val = does_utility_exist(utility)
+        if ret_val:
+            return make_json_response(
+                success=0,
+                errormsg=ret_val
+            )
+
+        args = _get_args_params_values(
+            data, conn, backup_obj_type, backup_file, server, manager)
+
+        escaped_args = [
+            escape_dquotes_process_arg(arg) for arg in args
+        ]
+        
+        try:
+            bfile = data['file'].encode('utf-8') \
+                if hasattr(data['file'], 'encode') else data['file']
+                
+            if backup_obj_type == 'objects':
+                args.append(data['database'])
+                escaped_args.append(data['database'])
+                p = BatchProcess(
+                    desc=BackupMessage(
+                        BACKUP.OBJECT, server.id, bfile,
+                        *args,
+                        database=data['database']
+                    ),
+                    cmd=utility, args=escaped_args, manager_obj=manager
+                )
+            else:
+                p = BatchProcess(
+                    desc=BackupMessage(
+                        BACKUP.SERVER if backup_obj_type != 'globals'
+                        else BACKUP.GLOBALS,
+                        server.id, bfile,
+                        *args
+                    ),
+                    cmd=utility, args=escaped_args, manager_obj=manager
+                )
+
+            p.set_env_variables(server)
+            p.start()
+            
+            return make_json_response(
+                data={'job_id': p.id, 'desc': p.desc.message, 'Success': 1}
+            )
+            
+        except Exception as e:
+            current_app.logger.exception(e)
+            return make_json_response(
+                status=410,
+                success=0,
+                errormsg=str(e)
+            )
+            
     except Exception as e:
         current_app.logger.exception(e)
         return make_json_response(
@@ -488,11 +686,6 @@ def create_backup_objects_job(sid):
             success=0,
             errormsg=str(e)
         )
-
-    # Return response
-    return make_json_response(
-        data={'job_id': jid, 'desc': p.desc.message, 'Success': 1}
-    )
 
 
 @blueprint.route(
@@ -660,3 +853,10 @@ def objects(sid, did, scid=None):
         data=schema_group,
         success=200
     )
+
+def create_module(app, **kwargs):
+    # Register blueprint
+    app.register_blueprint(blueprint)
+    
+    # Initialize the scheduler with the app
+    backup_scheduler.init_app(app)

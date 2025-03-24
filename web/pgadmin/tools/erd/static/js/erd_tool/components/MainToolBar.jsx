@@ -183,7 +183,7 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
           <PgIconButton title={gettext('SQL Options')} icon={<KeyboardArrowDownIcon />} splitButton
             name="menu-sql" ref={sqlMenuRef} onClick={toggleMenu}
           />
-          <PgIconButton title={gettext('Download image')} icon={<ImageRoundedIcon />}
+          <PgIconButton title={gettext('Export image')} icon={<ImageRoundedIcon />}
             shortcut={preferences.download_image}
             onClick={()=>{
               eventBus.fireEvent(ERD_EVENTS.DOWNLOAD_IMAGE);
