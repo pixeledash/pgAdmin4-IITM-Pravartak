@@ -382,20 +382,20 @@ def _execute_backup(self, job):
 
 #### Working
 
-![Backup Log 1](img/backup%20log%201.png)
 1.Backup Scheduled
+![Backup Log 1](img/backup%20log%201.png)
 
-![Backup Log 2](img/backup%20log%202.png)
 2.Thread checking for jobs every 30 sec
+![Backup Log 2](img/backup%20log%202.png)
 
-![Backup Log 3](img/backup%20log%203.png)
 3.Job creation
+![Backup Log 3](img/backup%20log%203.png)
 
-![Backup Dialog 3](img/backup%20ui%203.png)
 4.Process in pgAdmin UI
+![Backup Dialog 3](img/backup%20ui%203.png)
 
 
-## Multi-Format ERD Export Implementation
+## ERD Tool Implementation
 
 ### Overview
 
@@ -622,6 +622,21 @@ The export functionality is triggered from the ERD toolbar:
   }} 
 />
 ```
+Export tool in Main tool bar
+
+![ERD 1](img/erd%201.png)
+
+PNG features
+
+![ERD 2](img/erd%202.png)
+
+JPEG,WebP features
+
+![ERD 3](img/erd%203.png)
+
+Export formats
+
+![ERD 4](img/erd%204.png)
 
 
 ### Results Comparison
@@ -655,6 +670,8 @@ The CSS styling for these highlights is defined in the theme's CodeMirror overri
 '.diff-modified' → backgroundColor: 'rgba(255, 204, 0, 0.2)', color: '#806600'
 ```
 
+![Schema 2](img/schema%202.png)
+
 ### Copy-to-Clipboard Functionality
 
 A dedicated `CopyButton` component is implemented for the SQL diff section that:
@@ -665,6 +682,8 @@ A dedicated `CopyButton` component is implemented for the SQL diff section that:
 4. Reverts back to the copy icon after a delay using a custom hook (`useDelayedCaller`)
 
 This implementation helps users easily capture the SQL differences for sharing or applying to their databases.
+
+![Copy](img/schema%203.png)
 
 ### PropTypes Validation
 
@@ -689,6 +708,42 @@ The component uses a styled container with CSS classes that create a responsive 
 When SQL differences are detected, the component processes the diff text through the highlighter utility and renders it using `dangerouslySetInnerHTML` to preserve the HTML color formatting, while ensuring clipboard functionality still works with the plain text version.
 
 This comprehensive approach creates a visually intuitive interface that helps database administrators easily identify and understand schema differences between databases or database objects.
+
+
+![Schema 1](img/schema%201.png)
+
+In dark mode
+
+![Schema 4](img/schema%204.png)
+
+In high contrast mode
+
+![Schema 3](img/schema%205.png)
+
+
+## Running pgAdmin4
+### In server mode
+```bash
+(venv) $ cd $PGADMIN4_SRC/web
+(venv) $ python3 pgAdmin4.py
+```
+### In desktop runtime
+```bash
+(venv) $ cd $PGADMIN4_SRC/runtime
+(venv) $ yarn run start
+```
+
+## Additional Resources
+
+- General documentation: https://www.pgadmin.org/docs
+- Latest versions: https://www.pgadmin.org/download/
+- Main website: https://www.pgadmin.org/
+- Copyright and license information can be found in the file LICENCE.
+  
+## Contributors
+- Niyati Pradeep(https://github.com/niyatipradeep)
+- Ashmal Faisal(https://github.com/pixeledash)
+- Nanda Kishor (https://github.com/anikkilnandakishor)
 
 
 
