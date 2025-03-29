@@ -482,14 +482,136 @@ export function getExcludePatternsSchema() {
   return new ExcludePatternsSchema();
 }
 
+export class SchedulerSchema extends BaseUISchema {
+  constructor(fieldOptions={}, initValues={}) {
+    super({
+      enable_scheduler: false,
+      schedule_type: 'one_time',
+      start_date_time: null,
+      ...initValues,
+    });
+
+    this.fieldOptions = {
+      ...fieldOptions,
+    };
+  }
+
+  get idAttribute() {
+    return 'id';
+  }
+
+  get baseFields() {
+    return [{
+      id: 'enable_scheduler',
+      label: gettext('Enable scheduler'),
+      type: 'switch',
+      group: gettext('Scheduler'),
+      disabled: false,
+    }, {
+      id: 'schedule_type',
+      label: gettext('Schedule type'),
+      type: 'select',
+      options: [
+        {label: gettext('One time'), value: 'one_time'},
+        {label: gettext('Daily'), value: 'daily'},
+        {label: gettext('Weekly'), value: 'weekly'},
+        {label: gettext('Monthly'), value: 'monthly'}
+      ],
+      controlProps: {
+        allowClear: false,
+        width: '100%'
+      },
+      deps: ['enable_scheduler'],
+      disabled: (state) => !state.enable_scheduler,
+      group: gettext('Scheduler'),
+    }, {
+      id: 'start_date_time',
+      label: gettext('Start date and time'),
+      type: 'datetimepicker',
+      controlProps: {
+        autoOk: true,
+        disablePast: true,
+        placeholder: gettext('YYYY-MM-DD HH:mm:ss'),
+        showSeconds: true,
+        ampm: false,
+      },
+      deps: ['enable_scheduler'],
+      disabled: (state) => !state.enable_scheduler,
+      group: gettext('Scheduler'),
+    }, {
+      id: 'repeat_days',
+      label: gettext('Repeat days'),
+      type: 'select',
+      options: [
+        {label: gettext('Monday'), value: 'monday'},
+        {label: gettext('Tuesday'), value: 'tuesday'},
+        {label: gettext('Wednesday'), value: 'wednesday'},
+        {label: gettext('Thursday'), value: 'thursday'},
+        {label: gettext('Friday'), value: 'friday'},
+        {label: gettext('Saturday'), value: 'saturday'},
+        {label: gettext('Sunday'), value: 'sunday'}
+      ],
+      controlProps: {
+        multiple: true,
+        allowClear: false,
+        width: '100%'
+      },
+      deps: ['enable_scheduler', 'schedule_type'],
+      disabled: (state) => !state.enable_scheduler || state.schedule_type !== 'weekly',
+      group: gettext('Scheduler'),
+    }, {
+      id: 'repeat_months',
+      label: gettext('Repeat months'),
+      type: 'select',
+      options: [
+        {label: gettext('January'), value: '1'},
+        {label: gettext('February'), value: '2'},
+        {label: gettext('March'), value: '3'},
+        {label: gettext('April'), value: '4'},
+        {label: gettext('May'), value: '5'},
+        {label: gettext('June'), value: '6'},
+        {label: gettext('July'), value: '7'},
+        {label: gettext('August'), value: '8'},
+        {label: gettext('September'), value: '9'},
+        {label: gettext('October'), value: '10'},
+        {label: gettext('November'), value: '11'},
+        {label: gettext('December'), value: '12'}
+      ],
+      controlProps: {
+        multiple: true,
+        allowClear: false,
+        width: '100%'
+      },
+      deps: ['enable_scheduler', 'schedule_type'],
+      disabled: (state) => !state.enable_scheduler || state.schedule_type !== 'monthly',
+      group: gettext('Scheduler'),
+    }];
+  }
+
+  validate(state, setError) {
+    if (state.enable_scheduler) {
+      if (!state.start_date_time) {
+        setError('start_date_time', gettext('Start date and time cannot be empty'));
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+export function getSchedulerSchema() {
+  return new SchedulerSchema();
+}
+
 export default class BackupSchema extends BaseUISchema {
-  constructor(sectionSchema, typeObjSchema, saveOptSchema, disabledOptionSchema, miscellaneousSchema, excludePatternsSchema, fieldOptions = {}, treeNodeInfo=[], pgBrowser=null, backupType='server', objects={}) {
+  constructor(sectionSchema, typeObjSchema, saveOptSchema, disabledOptionSchema, miscellaneousSchema, excludePatternsSchema, schedulerSchema, fieldOptions = {}, treeNodeInfo=[], pgBrowser=null, backupType='server', objects={}) {
     super({
       file: undefined,
       format: 'custom',
       id: null,
       blobs: true,
       verbose: true,
+      enable_scheduler: false,
     });
 
     this.fieldOptions = {
@@ -507,6 +629,7 @@ export default class BackupSchema extends BaseUISchema {
     this.getDisabledOptionSchema = disabledOptionSchema;
     this.getMiscellaneousSchema = miscellaneousSchema;
     this.getExcludePatternsSchema = excludePatternsSchema;
+    this.getSchedulerSchema = schedulerSchema;
   }
 
   get idAttribute() {
@@ -734,12 +857,12 @@ export default class BackupSchema extends BaseUISchema {
       label: gettext('Miscellaneous'),
       group: gettext('Options'),
       schema: obj.getMiscellaneousSchema(),
-    },
-    {
-      id: 'object', label: gettext('Objects'), type: 'group',
+    }, {
+      id: 'object',
+      label: gettext('Objects'),
+      type: 'group',
       visible: isVisibleForServerBackup(obj?.backupType)
-    },
-    {
+    }, {
       id: 'objects',
       label: gettext('objects'),
       group: gettext('Objects'),
@@ -770,6 +893,12 @@ export default class BackupSchema extends BaseUISchema {
       },
       hasCheckbox: true,
       isFullTab: true,
+    }, {
+      type: 'nested-fieldset',
+      label: gettext('Scheduler'),
+      group: gettext('Scheduler'),
+      schema: obj.getSchedulerSchema(),
+      isTabPanel: true,
     }];
   }
 

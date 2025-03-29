@@ -134,6 +134,24 @@ export default function cmOverride(theme) {
         position: 'absolute',
         paddingRight: '1px 12px 1px 2px',
       }
-    }
+    },
+    '.diff-added': {
+      backgroundColor: 'rgba(0, 155, 0, 0.2)',
+      color: '#006400',
+      display: 'inline-block',
+      width: '100%',
+    },
+    '.diff-removed': {
+      backgroundColor: 'rgba(255, 0, 0, 0.2)',
+      color: '#8B0000',
+      display: 'inline-block',
+      width: '100%',
+    },
+    '.diff-modified': {
+      backgroundColor: 'rgba(255, 204, 0, 0.2)',
+      color: '#806600',
+      display: 'inline-block',
+      width: '100%',
+    },
   };
 }

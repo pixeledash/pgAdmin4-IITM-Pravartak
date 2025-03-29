@@ -10,13 +10,21 @@ import gettext from 'sources/gettext';
 
 import { styled } from '@mui/material/styles';
 
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 
 import { Box } from '@mui/material';
 import { InputSQL } from '../../../../../static/js/components/FormComponents';
 import { SchemaDiffEventsContext } from './SchemaDiffComponent';
 import { SCHEMA_DIFF_EVENT } from '../SchemaDiffConstants';
+import { copyToClipboard } from '../../../../../static/js/clipboard';
+import { PgIconButton } from '../../../../../static/js/components/Buttons';
+import FileCopyRoundedIcon from '@mui/icons-material/FileCopyRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import { useDelayedCaller } from '../../../../../static/js/custom_hooks';
+import { parseAndColorCodeDiff } from '../utils/diffHighlighter';
+import PropTypes from 'prop-types';
 
+// Add styles for diff highlighting
 const Root = styled('div')(({theme}) => ({
   height: '100%',
   display:'flex',
@@ -54,14 +62,60 @@ const Root = styled('div')(({theme}) => ({
         height: '100%',
       }
     },
-  },  
+  },
+  '& .sql-diff-container': {
+    fontFamily: 'monospace',
+    whiteSpace: 'pre',
+    padding: '8px',
+    height: '100%',
+    overflow: 'auto',
+    backgroundColor: theme.otherVars.editor.bg || theme.palette.background.default,
+    color: theme.otherVars.editor.fg || theme.palette.text.primary,
+    borderRadius: '4px',
+    border: '1px solid ' + theme.otherVars.borderColor,
+  },
+  '& .sql-diff-copy-btn': {
+    position: 'absolute',
+    top: '8px',
+    right: '8px',
+    zIndex: 1,
+  },
 }));
 
-export function Results() {
+// Copy button component
+function CopyButton({ text }) {
+  const [isCopied, setIsCopied] = useState(false);
+  const revertCopiedText = useDelayedCaller(() => {
+    setIsCopied(false);
+  });
 
+  const handleCopy = () => {
+    copyToClipboard(text);
+    setIsCopied(true);
+    revertCopiedText(1500);
+  };
+
+  return (
+    <PgIconButton 
+      size="small" 
+      className='sql-diff-copy-btn' 
+      icon={isCopied ? <CheckRoundedIcon /> : <FileCopyRoundedIcon />}
+      title={isCopied ? gettext('Copied!') : gettext('Copy')}
+      onClick={handleCopy}
+    />
+  );
+}
+
+CopyButton.propTypes = {
+  text: PropTypes.string.isRequired,
+};
+
+export function Results() {
   const [sourceSQL, setSourceSQL] = useState(null);
   const [targetSQL, setTargetSQL] = useState(null);
   const [sqlDiff, setSqlDiff] = useState(null);
+  const [coloredSqlDiff, setColoredSqlDiff] = useState(null);
+  const sqlDiffRef = useRef(null);
 
   const eventBus = useContext(SchemaDiffEventsContext);
 
@@ -69,12 +123,23 @@ export function Results() {
     eventBus.registerListener(
       SCHEMA_DIFF_EVENT.TRIGGER_CHANGE_RESULT_SQL, triggerUpdateResult);
 
+    return () => {
+      eventBus.removeListener(
+        SCHEMA_DIFF_EVENT.TRIGGER_CHANGE_RESULT_SQL, triggerUpdateResult);
+    };
   }, []);
 
   const triggerUpdateResult = (resultData) => {
     setSourceSQL(resultData.sourceSQL);
     setTargetSQL(resultData.targetSQL);
     setSqlDiff(resultData.SQLdiff);
+    
+    // Process and color-code the SQL diff
+    if (resultData.SQLdiff) {
+      setColoredSqlDiff(parseAndColorCodeDiff(resultData.SQLdiff));
+    } else {
+      setColoredSqlDiff(null);
+    }
   };
 
   return (
@@ -116,20 +181,31 @@ export function Results() {
         </Box>
         <Box className='Results-sqldata'>
           <Box className='Results-sqlInput'>
-            <InputSQL
-              onLable={true}
-              value={sqlDiff}
-              options={{
-                readOnly: true,
-              }}
-              readonly={true}
-              width='100%'
-              controlProps={
-                {
+            {/* Use the raw HTML for the diff with color coding */}
+            {coloredSqlDiff ? (
+              <div style={{ position: 'relative', height: '100%' }}>
+                <CopyButton text={sqlDiff || ''} />
+                <div 
+                  className="sql-diff-container" 
+                  ref={sqlDiffRef}
+                  dangerouslySetInnerHTML={{ __html: coloredSqlDiff }}
+                >
+                </div>
+              </div>
+            ) : (
+              <InputSQL
+                onLable={true}
+                value={sqlDiff}
+                options={{
+                  readOnly: true,
+                }}
+                readonly={true}
+                width='100%'
+                controlProps={{
                   showCopyBtn: true
-                }
-              }
-            />
+                }}
+              />
+            )}
           </Box>
         </Box>
       </Box>

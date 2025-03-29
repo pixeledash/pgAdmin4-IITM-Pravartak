@@ -10,9 +10,10 @@
 import _ from 'lodash';
 import BaseUISchema from 'sources/SchemaView/base_schema.ui';
 
-import TableSchema, { ConstraintsSchema } from '../../../../../../browser/server_groups/servers/databases/schemas/tables/static/js/table.ui';
+import ERDTableSchema from './ERDTableSchema';
 import ColumnSchema from '../../../../../../browser/server_groups/servers/databases/schemas/tables/columns/static/js/column.ui';
 import ForeignKeySchema from '../../../../../../browser/server_groups/servers/databases/schemas/tables/constraints/foreign_key/static/js/foreign_key.ui';
+import { ConstraintsSchema } from '../../../../../../browser/server_groups/servers/databases/schemas/tables/static/js/table.ui';
 
 class EmptySchema extends BaseUISchema {
   get baseFields() {
@@ -35,7 +36,7 @@ export function getTableDialogSchema(attributes, isNew, tableNodesDict, colTypes
     true,
   );
 
-  return new TableSchema(
+  return new ERDTableSchema(
     {
       relowner: [],
       schema: schemas.map((schema)=>{

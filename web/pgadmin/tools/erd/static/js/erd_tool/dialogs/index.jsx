@@ -49,8 +49,8 @@ export default class ERDDialogs {
           onSave={(...args)=>this.onSaveClick(...args, closeModal, params.callback)}
           onClose={closeModal}
           onDataChange={()=>{/*This is intentional (SonarQube)*/}}
-          hasSQL={false}
-          disableSqlHelp={true}
+          hasSQL={true}
+          disableSqlHelp={false}
           disableDialogHelp={true}
           Notifier={this.modal}
         />

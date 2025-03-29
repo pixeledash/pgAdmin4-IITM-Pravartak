@@ -28,8 +28,10 @@ class ToolsModule(PgAdminModule):
         """
         super().register(app, options)
 
-        from .backup import blueprint as module
-        app.register_blueprint(module)
+        # Register backup module and initialize scheduler
+        from .backup import blueprint as backup_module, create_module
+        app.register_blueprint(backup_module)
+        create_module(app)  # This will initialize the scheduler
 
         from .debugger import blueprint as module
         app.register_blueprint(module)

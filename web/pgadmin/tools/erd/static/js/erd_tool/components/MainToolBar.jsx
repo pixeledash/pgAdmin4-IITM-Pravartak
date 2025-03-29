@@ -28,6 +28,7 @@ import ImageRoundedIcon from '@mui/icons-material/ImageRounded';
 import FormatColorFillRoundedIcon from '@mui/icons-material/FormatColorFillRounded';
 import FormatColorTextRoundedIcon from '@mui/icons-material/FormatColorTextRounded';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import FileDownloadRoundedIcon from '@mui/icons-material/FileDownloadRounded';
 
 import { PgMenu, PgMenuItem, usePgMenuGroup } from '../../../../../../static/js/components/Menu';
 import gettext from 'sources/gettext';
@@ -284,6 +285,11 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
             }}/>
         </PgButtonGroup>
         <PgButtonGroup size="small">
+          <PgIconButton title={gettext('Export Diagram')} icon={<FileDownloadRoundedIcon />}
+            shortcut={preferences.export_diagram}
+            onClick={()=>{
+              eventBus.fireEvent(ERD_EVENTS.SHOW_EXPORT_DIALOG);
+            }} />
           <PgIconButton title={gettext('Help')} icon={<HelpIcon />} onClick={onHelpClick} />
         </PgButtonGroup>
       </StyledBox>

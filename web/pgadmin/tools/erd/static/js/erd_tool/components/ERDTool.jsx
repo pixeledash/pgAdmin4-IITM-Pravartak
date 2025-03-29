@@ -37,6 +37,8 @@ import pgAdmin from 'sources/pgadmin';
 import { styled } from '@mui/material/styles';
 import BeforeUnload from './BeforeUnload';
 import { isMac } from '../../../../../../static/js/keyboard_shortcuts';
+import ExportDialog from '../dialogs/ExportDialog';
+// import { downloadSvg } from '../../../../../../static/js/Explain/svg_download';
 
 /* Custom react-diagram action for keyboard events */
 export class KeyboardShortcutAction extends Action {
@@ -146,7 +148,7 @@ export default class ERDTool extends React.Component {
     _.bindAll(this, ['onLoadDiagram', 'onSaveDiagram', 'onSQLClick',
       'onImageClick', 'onAddNewNode', 'onEditTable', 'onCloneNode', 'onDeleteNode', 'onNoteClick',
       'onNoteClose', 'onOneToManyClick', 'onManyToManyClick', 'onAutoDistribute', 'onDetailsToggle',
-      'onChangeColors', 'onDropNode', 'onNotationChange', 'closePanel'
+      'onChangeColors', 'onDropNode', 'onNotationChange', 'closePanel', 'onExportDiagram'
     ]);
 
     this.diagram.zoomToFit = this.diagram.zoomToFit.bind(this.diagram);
@@ -228,6 +230,14 @@ export default class ERDTool extends React.Component {
     this.eventBus.registerListener(ERD_EVENTS.ZOOM_FIT, this.diagram.zoomToFit);
     this.eventBus.registerListener(ERD_EVENTS.ZOOM_IN, this.diagram.zoomIn);
     this.eventBus.registerListener(ERD_EVENTS.ZOOM_OUT, this.diagram.zoomOut);
+    this.eventBus.registerListener(ERD_EVENTS.SHOW_EXPORT_DIALOG, () => {
+      this.context.showModal(gettext('Export Diagram'), (closeModal) => (
+        <ExportDialog
+          onClose={closeModal}
+          onExport={(format) => this.onExportDiagram(format)}
+        />
+      ));
+    });
   }
 
   registerKeyboardShortcuts() {
@@ -892,6 +902,236 @@ export default class ERDTool extends React.Component {
     }, 250);
   }
 
+  onExportDiagram(format, options = {}) {
+    this.setLoading(gettext('Preparing the image...'));
+  
+    /* Move the diagram temporarily to align it to top-left of the canvas so that when
+     * taking the snapshot all the nodes are covered. Once the image is taken, repaint
+     * the canvas back to original state.
+     */
+    this.diagramContainerRef.current?.classList.add('ERDTool-html2canvasReset');
+    const margin = 40; // Increased margin to ensure nothing is cut off
+    let nodesRect = this.diagram.getEngine().getBoundingNodesRect(this.diagram.getModel().getNodes());
+    let linksRect = this.diagram.getBoundingLinksRect();
+  
+    // Calculate the actual content dimensions including all elements
+    const contentWidth = Math.max(
+      linksRect.BR.x - linksRect.TL.x,
+      nodesRect.getBottomRight().x - nodesRect.getTopLeft().x
+    );
+    const contentHeight = Math.max(
+      linksRect.BR.y - linksRect.TL.y,
+      nodesRect.getBottomRight().y - nodesRect.getTopLeft().y
+    );
+  
+    // Check what is to the most top left - links or nodes?
+    let topLeftXY = {
+      x: Math.min(nodesRect.getTopLeft().x, linksRect.TL.x),
+      y: Math.min(nodesRect.getTopLeft().y, linksRect.TL.y)
+    };
+    topLeftXY.x -= margin;
+    topLeftXY.y -= margin;
+  
+    let canvasRect = this.canvasEle.getBoundingClientRect();
+    let canvasTopLeftOnScreen = {
+      x: canvasRect.left,
+      y: canvasRect.top
+    };
+    let nodeLayerTopLeftPoint = {
+      x: canvasTopLeftOnScreen.x + this.diagram.getModel().getOffsetX(),
+      y: canvasTopLeftOnScreen.y + this.diagram.getModel().getOffsetY()
+    };
+    let nodesRectTopLeftPoint = {
+      x: nodeLayerTopLeftPoint.x + topLeftXY.x,
+      y: nodeLayerTopLeftPoint.y + topLeftXY.y
+    };
+  
+    let prevTransform = this.canvasEle.querySelector('div').style.transform;
+    
+    // Save original styles before modifying
+    const originalStyles = {
+      width: this.canvasEle.style.width,
+      height: this.canvasEle.style.height,
+      background: this.canvasEle.style.background,
+      canvasBgImage: this.canvasEle.style.backgroundImage, // Save original background image
+      bodyBg: document.body.style.background, // Save original body background
+    };
+    
+    // Save original background styles of container
+    const containerOriginalBg = this.diagramContainerRef.current ? 
+      this.diagramContainerRef.current.style.background : '';
+    
+    // Transform the diagram
+    this.canvasEle.childNodes.forEach((ele) => {
+      ele.style.transform = `translate(${nodeLayerTopLeftPoint.x - nodesRectTopLeftPoint.x}px, ${nodeLayerTopLeftPoint.y - nodesRectTopLeftPoint.y}px) scale(1.0)`;
+    });
+  
+    setTimeout(() => {
+      // Calculate dimensions based on content
+      let width = contentWidth + margin * 2;
+      let height = contentHeight + margin * 2;
+      
+      let isCut = false;
+      
+      // Apply high resolution option (2x)
+      const scale = options.highResolution ? 2 : 1;
+      if (options.highResolution) {
+        width *= scale;
+        height *= scale;
+      }
+      
+      /* Canvas limitation - https://html2canvas.hertzen.com/faq */
+      if(width >= 32767) {
+        width = 32766;
+        isCut = true;
+      }
+      if(height >= 32767) {
+        height = 32766;
+        isCut = true;
+      }
+  
+      // Set the canvas dimensions to match the desired output size
+      this.canvasEle.style.width = `${width}px`;
+      this.canvasEle.style.height = `${height}px`;
+  
+      // Use the appropriate export function based on format
+      const fileName = this.getCurrentProjectName();
+      const fileExtension = format;
+      
+      // For raster formats (PNG, JPEG, WebP) and PDF
+      // Options for dom-to-image-more
+      const exportOptions = {
+        width,
+        height,
+        quality: options.quality ? options.quality / 100 : undefined, // Quality 0-1
+        // Always set bgcolor to white now
+        bgcolor: '#ffffff',
+        // Note: pixelRatio, style, skipAutoScale, canvas are not standard dom-to-image options
+      };
+      
+      if (format === 'pdf') {
+        // For PDF, we first convert to PNG then use jsPDF to create a PDF
+        import('dom-to-image-more').then((domtoimage) => {
+          domtoimage.toPng(this.canvasEle, exportOptions)
+            .then((dataUrl) => {
+              import('jspdf').then(({ jsPDF }) => {
+                const pdf = new jsPDF({
+                  orientation: width > height ? 'landscape' : 'portrait',
+                  unit: 'px',
+                  format: [width, height]
+                });
+                const imgProps = pdf.getImageProperties(dataUrl);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(fileName + '.pdf');
+              });
+            })
+            .catch(this.handleExportError)
+            .finally(() => {
+              // Pass originalStyles including bodyBg and canvasBgImage
+              this.restoreOriginalStyles(prevTransform, originalStyles, containerOriginalBg, isCut);
+            });
+        });
+        return;
+      } 
+      
+      // Handle raster formats
+      import('dom-to-image-more').then((domtoimage) => {
+        let exportPromise;
+        
+        switch (format) {
+        case 'jpeg':
+          exportPromise = domtoimage.toJpeg(this.canvasEle, exportOptions);
+          break;
+        case 'webp':
+          // dom-to-image-more doesn't have direct webp. Generate PNG first.
+          // Always use white background for intermediate PNG
+          exportPromise = domtoimage.toPng(this.canvasEle, { width, height, bgcolor: '#ffffff' })
+            .then(pngDataUrl => {
+              // Convert PNG data URL to WebP using canvas
+              return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = width;
+                  canvas.height = height;
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(img, 0, 0, width, height);
+                  const webpDataUrl = canvas.toDataURL('image/webp', options.quality ? options.quality / 100 : undefined);
+                  resolve(webpDataUrl);
+                };
+                img.src = pngDataUrl;
+              });
+            });
+          break;
+        case 'png':
+        default:
+          exportPromise = domtoimage.toPng(this.canvasEle, exportOptions);
+          break;
+        }
+        
+        exportPromise
+          .then((dataUrl) => {
+            let link = document.createElement('a');
+            link.setAttribute('href', dataUrl);
+            link.setAttribute('download', fileName + '.' + fileExtension);
+            link.click();
+            link.remove();
+          })
+          .catch(this.handleExportError)
+          .finally(() => {
+            // Pass originalStyles including bodyBg and canvasBgImage
+            this.restoreOriginalStyles(prevTransform, originalStyles, containerOriginalBg, isCut);
+          });
+      });
+    }, 1000); // Revert timeout delay back to 1000ms
+  }
+  
+  // Helper method to restore original styles
+  restoreOriginalStyles(prevTransform, originalStyles, containerOriginalBg, isCut) {
+    /* Revert back to the original CSS styles */
+    this.diagramContainerRef.current?.classList.remove('ERDTool-html2canvasReset');
+    
+    // Restore body background
+    document.body.style.background = originalStyles.bodyBg;
+  
+    // Restore canvas element styles
+    this.canvasEle.style.width = originalStyles.width;
+    this.canvasEle.style.height = originalStyles.height;
+    this.canvasEle.style.background = originalStyles.background;
+    this.canvasEle.style.backgroundImage = originalStyles.canvasBgImage; // Restore background image
+    
+    // Restore container background if it exists
+    if (this.diagramContainerRef.current) {
+      this.diagramContainerRef.current.style.background = containerOriginalBg;
+    }
+    
+    // Restore transform
+    this.canvasEle.childNodes.forEach((ele) => {
+      ele.style.transform = prevTransform;
+    });
+    
+    this.setLoading(null);
+    
+    if (isCut) {
+      pgAdmin.Browser.notifier.alert(
+        gettext('Maximum image size limit'),
+        gettext('The downloaded image has exceeded the maximum size of 32767 x 32767 pixels, and has been cropped to that size.')
+      );
+    }
+  }
+  
+  // Helper method to handle export errors
+  handleExportError(err) {
+    console.error(err);
+    let msg = gettext('Unknown error. Check console logs');
+    if (err.name) {
+      msg = `${err.name}: ${err.message}`;
+    }
+    pgAdmin.Browser.notifier.alert(gettext('Error'), msg);
+  }
+  
   render() {
     this.erdDialogs.modal = this.context;
 
