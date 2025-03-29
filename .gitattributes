@@ -1,0 +1,2 @@
+dist/pgadmin4-8.14-docs.tar.gz filter=lfs diff=lfs merge=lfs -text
+runtime/node_modules/electron/dist/electron filter=lfs diff=lfs merge=lfs -text
