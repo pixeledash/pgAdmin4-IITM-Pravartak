@@ -376,7 +376,12 @@ def _execute_backup(self, job):
         # Record results
 ```
 ### Screenshots
-
+![Backup Dialog 1]("img/backup%20ui%201.png")
+![Backup Dialog 2]("img/backup%20ui%202.png")
+![Backup Log 1]("img/backup%20log%201.png")
+![Backup Log 2]("img/backup%20log%202.png")
+![Backup Log 3]("img/backup%20log%203.png")
+![Backup Dialog 3]("img/backup%20ui%203.png")
 
 
 ## Multi-Format ERD Export Implementation
