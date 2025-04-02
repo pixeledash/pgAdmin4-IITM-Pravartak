@@ -239,142 +239,92 @@ The pgAdmin 4 Automated Backup Scheduler provides a robust system for scheduling
 
 ### Flexible Scheduling Options
 
-The scheduler supports multiple backup frequencies:
+The scheduler supports multiple backup frequencies through a comprehensive scheduling system:
 
-```python
-class BackupSchedulerJob:
-    def __init__(self, sid, data, schedule_type, start_time):
-        self.schedule_type = schedule_type  # 'one_time', 'daily', 'weekly', or 'monthly'
-        self.start_time = start_time
-        # ...
-```
+1. **One-time Backups**: Executes a single backup at a specified date and time, ideal for pre-maintenance backups
+2. **Daily Backups**: Runs backups every day at the configured time, perfect for daily snapshots
+3. **Weekly Backups**: Allows selection of specific days of the week for backups, useful for end-of-week archives
+4. **Monthly Backups**: Enables backups on chosen months, suitable for long-term retention policies
 
-Users can select from various schedule types through the UI:
-
-```javascript
-// UI scheduling options
-<Select value={schedule_type}>
-  <MenuItem value="one_time">{gettext('One time')}</MenuItem>
-  <MenuItem value="daily">{gettext('Daily')}</MenuItem>
-  <MenuItem value="weekly">{gettext('Weekly')}</MenuItem>
-  <MenuItem value="monthly">{gettext('Monthly')}</MenuItem>
-</Select>
-```
-
-For weekly and monthly schedules, additional options allow specific day/month selection.
+The UI presents these options through an intuitive form with appropriate date/time selectors and repeat interval choices.
 
 ### Dynamic Scheduling Logic
 
-The scheduler calculates the next execution time based on schedule type:
+The scheduler implements intelligent timing calculations through several key features:
 
-```python
-def calculate_next_run(self):
-    """Calculate the next run time based on schedule type"""
-    if self.schedule_type == 'daily':
-        self.next_run = self.last_run.replace(
-            hour=self.start_time.hour,
-            minute=self.start_time.minute
-        ) + timedelta(days=1)
-    elif self.schedule_type == 'weekly':
-        # Weekly logic
-    elif self.schedule_type == 'monthly':
-        # Monthly logic with proper month transition handling
-```
+1. **Next Run Calculator**: Automatically determines the next execution time based on:
+   - The schedule type (one-time, daily, weekly, monthly)
+   - Previous execution time
+   - Configured intervals and preferences
+
+2. **Schedule Validation**: Ensures valid scheduling by:
+   - Preventing past dates/times
+   - Validating month/day combinations
+   - Handling timezone considerations
+
+3. **Run-time Adjustments**: Manages edge cases like:
+   - Month transitions with varying days
+   - Daylight saving time changes
+   - Leap year considerations
 
 ### Background Scheduler Service
 
-The scheduler operates as a separate thread to avoid interfering with main application operations:
+The service operates independently through a robust background process:
 
-```python
-def start(self):
-    """Start the scheduler thread"""
-    self.running = True
-    self.thread = threading.Thread(target=self._run, name="BackupScheduler")
-    self.thread.daemon = False
-    self.thread.start()
-```
+1. **Thread Management**:
+   - Runs as a daemon thread
+   - Maintains its own lifecycle
+   - Handles graceful shutdown
 
-The main scheduler loop continuously checks for jobs to execute:
+2. **Error Recovery**:
+   - Implements retry mechanisms
+   - Logs failures for troubleshooting
+   - Maintains scheduler state during issues
 
-```python
-def _run(self):
-    """Main scheduler loop"""
-    while self.running:
-        with self.app.app_context():
-            for sid, job_list in self.jobs.items():
-                for job in job_list:
-                    if job.should_run():
-                        self._execute_backup(job)
-                        job.last_run = datetime.now()
-                        job.calculate_next_run()
-        time.sleep(30)  # Check every 30 seconds
-```
+3. **Resource Optimization**:
+   - Uses efficient sleep/wake cycles
+   - Minimizes database connections
+   - Optimizes memory usage
 
 ### Job Management & Validation
 
-Backup jobs are stored using SQLAlchemy ORM:
+Comprehensive job handling system includes:
 
-```python
-class BackupSchedule(Base):
-    """ORM model for backup schedule configurations"""
-    __tablename__ = 'backup_schedules'
-    id = Column(Integer, primary_key=True)
-    server_id = Column(Integer, nullable=False)
-    file_directory = Column(String, nullable=False)
-    backup_frequency = Column(String, nullable=False)
-    # Additional fields...
-```
+1. **Data Storage**:
+   - Uses SQLAlchemy ORM for job persistence
+   - Maintains job history and status
+   - Tracks execution statistics
 
-Configuration validation ensures valid parameters:
+2. **Configuration Validation**:
+   - Validates required parameters
+   - Checks file paths and permissions
+   - Verifies database connectivity
 
-```python
-def _validate_backup_config(self, config):
-    """Validate backup configuration"""
-    # Check required fields
-    # Validate time format
-    # Ensure proper schedule configuration
-```
+3. **Status Tracking**:
+   - Monitors job execution
+   - Records success/failure states
+   - Maintains execution logs
 
 ### API Endpoints
 
-RESTful API endpoints enable monitoring and management:
+The scheduler exposes RESTful endpoints for control and monitoring:
 
-```python
-@blueprint.route('/scheduler_status', methods=['GET'])
-@pga_login_required
-def scheduler_status():
-    """Return scheduler status information"""
-    status_data = {
-        'running': backup_scheduler.running,
-        'job_count': sum(len(jobs) for jobs in backup_scheduler.jobs.values()),
-        'jobs': {}  # Populate with job details
-    }
-    return make_json_response(data=status_data)
+1. **Status Endpoints**:
+   - Get scheduler status
+   - List active jobs
+   - View job history
 
-@blueprint.route('/restart_scheduler', methods=['POST'])
-@pga_login_required
-def restart_scheduler():
-    """Restart the backup scheduler service"""
-    if backup_scheduler.running:
-        backup_scheduler.stop()
-    backup_scheduler.start()
-    return make_json_response(data={'success': True})
-```
+2. **Control Endpoints**:
+   - Start/stop scheduler
+   - Add/remove jobs
+   - Modify schedules
 
-### Execution Process
+3. **Monitoring Endpoints**:
+   - Health checks
+   - Performance metrics
+   - Error reporting
 
-When a backup job runs, the system establishes a database connection and executes the backup using the same utilities as manual backups:
 
-```python
-def _execute_backup(self, job):
-    """Execute a backup job"""
-    with self.app.test_request_context():
-        # Set up authentication context
-        # Connect to server
-        # Configure backup parameters
-        # Execute backup process
-        # Record results
-```
 ### Screenshots
 #### Backup Dialog UI 
 ![Backup Dialog 1](img/backup%20ui%201.png)
@@ -402,211 +352,61 @@ def _execute_backup(self, job):
 The Entity Relationship Diagram (ERD) tool in pgAdmin 4 includes a comprehensive export system supporting multiple image formats and PDF output. This implementation enables users to capture, share, and document their database designs with high-quality visuals.
 
 ### Multi-Format Export Support
+The ERD tool provides comprehensive export capabilities supporting multiple formats through a user-friendly dialog interface. Users can choose between:
+- PNG format for lossless quality and transparency
+- JPEG format with adjustable compression for smaller file sizes
+- WebP format for modern web-optimized images
+- PDF format for professional documentation
 
-The export dialog provides users with multiple output format options:
-
-```javascript
-<FormControl fullWidth>
-  <InputLabel>{gettext('Export Format')}</InputLabel>
-  <Select
-    value={format}
-    onChange={(e) => setFormat(e.target.value)}
-  >
-    <MenuItem value="png">PNG</MenuItem>
-    <MenuItem value="jpeg">JPEG</MenuItem>
-    <MenuItem value="webp">WebP</MenuItem>
-    <MenuItem value="pdf">PDF</MenuItem>
-  </Select>
-</FormControl>
-```
-
-Each format is processed with format-specific optimization:
-
-```javascript
-switch (format) {
-  case 'jpeg':
-    exportPromise = domtoimage.toJpeg(this.canvasEle, exportOptions);
-    break;
-  case 'webp':
-    // Custom WebP conversion with quality control
-    exportPromise = domtoimage.toPng(this.canvasEle)
-      .then(pngDataUrl => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            const webpDataUrl = canvas.toDataURL('image/webp', 
-              options.quality ? options.quality / 100 : undefined);
-            resolve(webpDataUrl);
-          };
-          img.src = pngDataUrl;
-        });
-      });
-    break;
-  // Additional formats...
-}
-```
+The format selection is implemented using Material-UI's Select component, which triggers format-specific processing logic when an export is initiated.
 
 ### High-Resolution Export
+To support high-quality exports, especially for large displays or printing:
+- A checkbox option enables 2x resolution export
+- When enabled, the export dimensions are doubled
+- The high-resolution option works across all supported formats
+- Image quality is maintained through proper scaling algorithms
+- Particularly useful for detailed diagrams or presentations
 
-Users can enable 2x resolution for sharper images:
+### Quality Control for Image Formats
+For formats supporting compression (JPEG and WebP):
+- A quality slider appears dynamically when these formats are selected
+- Quality range from 10-100 allows fine-tuned control
+- Lower values reduce file size but may affect image quality
+- Higher values maintain quality but increase file size
+- The slider provides immediate visual feedback
 
-```javascript
-<FormControlLabel
-  control={
-    <Checkbox 
-      checked={highResolution} 
-      onChange={(e) => setHighResolution(e.target.checked)} 
-    />
-  }
-  label={gettext('High resolution (2x)')}
-/>
-```
+### Automatic Sizing
+The export system implements intelligent dimension calculation:
+1. Analyzes all diagram elements including nodes and links
+2. Determines the bounding box of the entire diagram
+3. Adds appropriate margins to prevent content cropping
+4. Handles both compact and expansive diagrams
+5. Ensures no diagram elements are cut off in the export
 
-Implementation scales dimensions proportionally:
-
-```javascript
-// Apply high resolution scaling
-const scale = options.highResolution ? 2 : 1;
-if (options.highResolution) {
-  width *= scale;
-  height *= scale;
-}
-```
-
-### Quality Control for Lossy Formats
-
-For JPEG and WebP formats, a quality slider is provided:
-
-```javascript
-{showQualityOption && (
-  <Box sx={{ mb: 2 }}>
-    <Typography id="quality-slider" gutterBottom>
-      {gettext('Quality')}
-    </Typography>
-    <Slider
-      value={quality}
-      onChange={(e, newValue) => setQuality(newValue)}
-      valueLabelDisplay="auto"
-      min={10}
-      max={100}
-    />
-  </Box>
-)}
-```
-
-The quality value is applied during export:
-
-```javascript
-const exportOptions = {
-  width,
-  height,
-  quality: options.quality ? options.quality / 100 : undefined,
-  bgcolor: '#ffffff',
-};
-```
-
-### Automatic Sizing and Positioning
-
-The export process automatically calculates the dimensions required to include all diagram elements:
-
-```javascript
-// Calculate content dimensions including all elements
-const contentWidth = Math.max(
-  linksRect.BR.x - linksRect.TL.x,
-  nodesRect.getBottomRight().x - nodesRect.getTopLeft().x
-);
-const contentHeight = Math.max(
-  linksRect.BR.y - linksRect.TL.y,
-  nodesRect.getBottomRight().y - nodesRect.getTopLeft().y
-);
-
-// Check what is to the most top left - links or nodes?
-let topLeftXY = {
-  x: Math.min(nodesRect.getTopLeft().x, linksRect.TL.x),
-  y: Math.min(nodesRect.getTopLeft().y, linksRect.TL.y)
-};
-topLeftXY.x -= margin;
-topLeftXY.y -= margin;
-```
-
-The diagram is then repositioned to ensure complete capture:
-
-```javascript
-// Transform the diagram to capture all content
-this.canvasEle.childNodes.forEach((ele) => {
-  ele.style.transform = `translate(${nodeLayerTopLeftPoint.x - nodesRectTopLeftPoint.x}px, 
-    ${nodeLayerTopLeftPoint.y - nodesRectTopLeftPoint.y}px) scale(1.0)`;
-});
-```
+### Consistent Background Rendering
+To ensure professional-looking exports:
+- Enforces a clean white background for all exports
+- Temporarily overrides any custom background settings
+- Preserves the original diagram styling during export
+- Restores all original styles after export completion
+- Maintains consistency across different export formats
 
 ### PDF Generation
+The PDF export process involves several sophisticated steps:
+1. Initial conversion to high-quality PNG
+2. Intelligent orientation selection (portrait/landscape)
+3. Proper scaling to fit standard PDF dimensions
+4. Preservation of diagram clarity and readability
+5. Integration with jsPDF for reliable PDF generation
 
-PDF export uses a two-step process:
-
-1. First converting the diagram to a PNG image
-2. Then creating a properly formatted PDF with jsPDF
-
-```javascript
-if (format === 'pdf') {
-  import('dom-to-image-more').then((domtoimage) => {
-    domtoimage.toPng(this.canvasEle, exportOptions)
-      .then((dataUrl) => {
-        import('jspdf').then(({ jsPDF }) => {
-          const pdf = new jsPDF({
-            orientation: width > height ? 'landscape' : 'portrait',
-            unit: 'px',
-            format: [width, height]
-          });
-          const imgProps = pdf.getImageProperties(dataUrl);
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-          pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-          pdf.save(fileName + '.pdf');
-        });
-      });
-  });
-}
-```
-
-### Performance Optimization
-
-The implementation includes several optimizations to ensure high-quality exports:
-
-1. **State Preservation**: Original styles are saved and restored after export:
-   ```javascript
-   // Save original styles before modifying
-   const originalStyles = {
-     width: this.canvasEle.style.width,
-     height: this.canvasEle.style.height,
-     background: this.canvasEle.style.background,
-     canvasBgImage: this.canvasEle.style.backgroundImage
-   };
-   
-   // Later restore these styles
-   restoreOriginalStyles(prevTransform, originalStyles, containerOriginalBg);
-   ```
-
-2. **Size Limitation Handling**: Large diagrams are automatically scaled to fit maximum allowed dimensions:
-   ```javascript
-   if(width >= 32767) {
-     width = 32766;
-     isCut = true;
-   }
-   if(height >= 32767) {
-     height = 32766;
-     isCut = true;
-   }
-   ```
-
-3. **Consistent Rendering**: Background grid is temporarily removed to ensure clean exports:
-   ```javascript
-   this.diagramContainerRef.current?.classList.add('ERDTool-html2canvasReset');
-   ```
+### Error Handling
+Robust error handling ensures reliability:
+- Validates export parameters before processing
+- Provides meaningful error messages
+- Handles memory constraints gracefully
+- Recovers from failed export attempts
+- Maintains diagram state integrity
 
 ### Usage Example
 
